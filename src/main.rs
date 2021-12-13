@@ -14,13 +14,13 @@ fn main() {
   // println!("{0} + {1} = {2}", a.to_string(), b.to_string(), (a + b).to_string());
   // println!("{0} - {1} = {2}", a.to_string(), b.to_string(), (a - b).to_string());
   // println!("{0} * {1} = {2}", a.to_string(), b.to_string(), (a * b).to_string());
-  let power = 100000;
-  // println!(
-  //   "{0} ^ {1} = length - {2}",
-  //   a.to_string(),
-  //   power,
-  //   (a.pow(power)).to_string().len()
-  // );
+  let power = 10000;
+  println!(
+    "{0} ^ {1} = {2}",
+    a.to_string(),
+    power,
+    (a.pow(power)).to_string()
+  );
 
   let duration = current_time.elapsed();
   println!("{:?}", duration);

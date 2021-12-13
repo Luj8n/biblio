@@ -2,21 +2,25 @@ use std::ops::{Add, Mul, Sub};
 
 type Digit = u8;
 type Bigger = u16;
-const BASE: Bigger = 9 as Bigger + 1;
 
 #[derive(Clone, Debug)]
 
 pub struct LargeNum {
   raw: Vec<Digit>,
   positive: bool,
+  base: Bigger,
 }
 
 impl LargeNum {
   pub fn new(value: Vec<Digit>) -> LargeNum {
-    assert!(value.iter().all(|v| (*v as Bigger) < BASE));
+    assert!(value.iter().all(|v| (*v as Bigger) < Digit::MAX as Bigger + 1));
     let raw: Vec<Digit> = value;
 
-    LargeNum { raw, positive: true }
+    LargeNum {
+      raw,
+      positive: true,
+      base: Digit::MAX as Bigger + 1,
+    }
   }
 
   pub fn from(string: &str) -> LargeNum {
@@ -25,6 +29,7 @@ impl LargeNum {
 
   // TODO: put this into a trait and optimize it
   fn greater_than(&self, other: &LargeNum) -> bool {
+    assert_eq!(self.base, other.base);
     if self.raw.len() == other.raw.len() {
       let i = (0..self.raw.len())
         .rev()
@@ -49,6 +54,7 @@ impl LargeNum {
     LargeNum {
       raw: self.raw[0..self.raw.len() - zero_count].to_vec(),
       positive: true,
+      base: self.base,
     }
   }
 
@@ -73,6 +79,8 @@ impl LargeNum {
   }
 
   fn ignore_sign_add(&self, other: &LargeNum) -> LargeNum {
+    assert_eq!(self.base, other.base);
+
     let (bigger, smaller) = {
       if self.raw.len() > other.raw.len() {
         (&self.raw, &other.raw)
@@ -87,22 +95,23 @@ impl LargeNum {
     for i in 0..=bigger.len() {
       if i < smaller.len() {
         let t = bigger[i] as Bigger + smaller[i] as Bigger + carry;
-        new_num.push((t % BASE) as Digit);
-        carry = t / BASE;
+        new_num.push((t % self.base) as Digit);
+        carry = t / self.base;
       } else if i == bigger.len() {
         if carry == 1 {
           new_num.push(1);
         }
       } else {
         let t = bigger[i] as Bigger + carry;
-        new_num.push((t % BASE) as Digit);
-        carry = t / BASE;
+        new_num.push((t % self.base) as Digit);
+        carry = t / self.base;
       }
     }
 
     LargeNum {
       raw: new_num,
       positive: true,
+      base: self.base,
     }
   }
 
@@ -128,6 +137,8 @@ impl LargeNum {
   }
 
   fn ignore_sign_sub(&self, other: &LargeNum) -> LargeNum {
+    assert_eq!(self.base, other.base);
+
     let (bigger, smaller) = {
       if self.greater_than(other) {
         (&self.raw, &other.raw)
@@ -141,14 +152,14 @@ impl LargeNum {
 
     for i in 0..bigger.len() {
       if i < smaller.len() {
-        new_num.push(((bigger[i] as Bigger + BASE - carry - smaller[i] as Bigger) % BASE) as Digit);
+        new_num.push(((bigger[i] as Bigger + self.base - carry - smaller[i] as Bigger) % self.base) as Digit);
         carry = if smaller[i] as Bigger + carry > bigger[i] as Bigger {
           1
         } else {
           0
         };
       } else {
-        new_num.push(((bigger[i] as Bigger + BASE - carry) % BASE) as Digit);
+        new_num.push(((bigger[i] as Bigger + self.base - carry) % self.base) as Digit);
         carry = if bigger[i] as Bigger == 0 && carry == 1 { 1 } else { 0 };
       }
     }
@@ -156,6 +167,7 @@ impl LargeNum {
     LargeNum {
       raw: new_num,
       positive: true,
+      base: self.base,
     }
     .trim_zeros()
   }
@@ -165,6 +177,8 @@ impl LargeNum {
   }
 
   fn ignore_sign_mul(&self, other: &LargeNum) -> LargeNum {
+    assert_eq!(self.base, other.base);
+
     let (bigger, smaller) = {
       if self.raw.len() > other.raw.len() {
         (&self.raw, &other.raw)
@@ -173,7 +187,11 @@ impl LargeNum {
       }
     };
 
-    let mut added_together: LargeNum = LargeNum::default();
+    let mut added_together: LargeNum = LargeNum {
+      raw: vec![],
+      positive: true,
+      base: self.base,
+    };
 
     for i in 0..smaller.len() {
       let mut temp_num: Vec<Digit> = vec![];
@@ -187,8 +205,8 @@ impl LargeNum {
           break;
         }
         let t = bigger[j] as Bigger * smaller[i] as Bigger + carry;
-        temp_num.push((t % BASE) as Digit);
-        carry = t / BASE;
+        temp_num.push((t % self.base) as Digit);
+        carry = t / self.base;
       }
 
       temp_num.splice(0..0, [0].repeat(i));
@@ -197,6 +215,7 @@ impl LargeNum {
         + LargeNum {
           raw: temp_num,
           positive: true,
+          base: self.base,
         };
     }
 
@@ -206,7 +225,11 @@ impl LargeNum {
   pub fn pow(self, power: u128) -> LargeNum {
     let mut num = self;
     let mut power = power;
-    let mut result = LargeNum::new(vec![1]);
+    let mut result = LargeNum {
+      raw: vec![1],
+      positive: true,
+      base: num.base,
+    };
 
     while power > 0 {
       if power & 1 == 1 {
@@ -224,20 +247,58 @@ impl Default for LargeNum {
     LargeNum {
       raw: vec![0],
       positive: true,
+      base: Digit::MAX as Bigger + 1,
     }
   }
 }
 
 impl ToString for LargeNum {
   fn to_string(&self) -> String {
-    // TODO: for all bases
+    println!("HERE1!");
+    let mut summed = LargeNum {
+      raw: vec![0],
+      positive: true,
+      base: 10,
+    };
+
+    let base_as_large = LargeNum {
+      raw: self
+        .base
+        .to_string()
+        .chars()
+        .map(|x| x.to_digit(10).unwrap() as u8)
+        .collect(),
+      positive: true,
+      base: 10,
+    };
+
+    let mut base_prod = LargeNum {
+      raw: vec![1],
+      positive: true,
+      base: 10,
+    };
+
+    println!("HERE2!");
+
+    for (i, &d) in self.raw.iter().enumerate() {
+      let d_as_large = LargeNum {
+        raw: d.to_string().chars().map(|x| x.to_digit(10).unwrap() as u8).collect(),
+        positive: true,
+        base: 10,
+      };
+
+      summed = summed + ((&d_as_large).mul(&base_prod));
+      base_prod = base_prod * base_as_large.clone();
+    }
+
+    println!("HERE3!");
+
     let mut s = String::new();
     if !self.positive {
       s += "-";
     }
-    for num in &self.raw.iter().rev().collect::<Vec<&Digit>>() {
+    for num in summed.raw.iter().collect::<Vec<&Digit>>() {
       s += &num.to_string();
-      // s += " ";
     }
     s.trim_end().to_owned()
   }
