@@ -1,235 +1,253 @@
-use std::ops::{Add, Mul, Sub};
+// TODO! make Ord work with negative numbers
+// TODO: add '+=' (AddAsign)...
+// TODO: implement Display trait
+// TODO: write tests
+// TODO: add 'Div' function
+// TODO: make operations work with primitive types
+// TODO: write benchmarks
 
-type Digit = u8;
-type Bigger = u16;
+const BASE: u16 = 10;
 
 #[derive(Clone, Debug)]
 
 pub struct LargeNum {
-  raw: Vec<Digit>,
+  digits: Vec<u8>,
   positive: bool,
-  base: Bigger,
 }
 
 impl LargeNum {
-  pub fn new(value: Vec<Digit>) -> LargeNum {
-    assert!(value.iter().all(|v| (*v as Bigger) < Digit::MAX as Bigger + 1));
-    let raw: Vec<Digit> = value;
+  pub fn new(digits: Vec<u8>, positive: bool) -> LargeNum {
+    assert!(digits.iter().all(|&v| (v as u16) < BASE));
 
-    LargeNum {
-      raw,
-      positive: true,
-      base: Digit::MAX as Bigger + 1,
-    }
+    LargeNum { digits, positive }.trim_zeros()
   }
 
   pub fn from(string: &str) -> LargeNum {
-    todo!()
+    assert!(string.is_empty() == false);
+
+    let (string, positive) = {
+      if string.starts_with("-") {
+        (&string[1..], false)
+      } else {
+        (string, true)
+      }
+    };
+
+    let digits: Vec<u8> = string
+      .chars()
+      .map(|x| x.to_digit(10).expect("All characters must be digits (0..=9)") as u8)
+      .rev()
+      .collect();
+
+    LargeNum { digits, positive }.trim_zeros()
   }
 
-  // TODO: put this into a trait and optimize it
-  fn greater_than(&self, other: &LargeNum) -> bool {
-    assert_eq!(self.base, other.base);
-    if self.raw.len() == other.raw.len() {
-      let i = (0..self.raw.len())
-        .rev()
-        .find(|&i| self.raw[i] != other.raw[i])
-        .unwrap_or(0);
-      self.raw[i] > other.raw[i]
-    } else {
-      self.raw.len() > other.raw.len()
+  pub fn zero() -> LargeNum {
+    LargeNum {
+      digits: vec![0],
+      positive: true,
     }
   }
 
-  fn trim_zeros(self) -> LargeNum {
-    let zero_count = self
-      .raw
-      .iter()
-      .skip(1)
-      .rev()
-      .take_while(|x| **x == 0)
-      .collect::<Vec<&Digit>>()
-      .len();
-
+  pub fn one() -> LargeNum {
     LargeNum {
-      raw: self.raw[0..self.raw.len() - zero_count].to_vec(),
+      digits: vec![1],
       positive: true,
-      base: self.base,
+    }
+  }
+
+  pub fn signnum(&self) -> i8 {
+    if self.digits == vec![0] {
+      0
+    } else if self.positive {
+      1
+    } else {
+      -1
     }
   }
 
   pub fn change_sign(self) -> LargeNum {
-    let mut cp = self;
-    cp.positive = !cp.positive;
-    cp
+    let mut large_num = self;
+    large_num.positive = !large_num.positive;
+    large_num
+  }
+
+  pub fn abs(self) -> LargeNum {
+    let mut large_num = self;
+    large_num.positive = true;
+    large_num
+  }
+
+  fn trim_zeros(self) -> LargeNum {
+    let zero_count = self
+      .digits
+      .iter()
+      .skip(1)
+      .rev()
+      .take_while(|x| **x == 0)
+      .collect::<Vec<&u8>>()
+      .len();
+
+    LargeNum {
+      digits: self.digits[0..self.digits.len() - zero_count].to_vec(),
+      positive: true,
+    }
   }
 
   pub fn add(&self, other: &LargeNum) -> LargeNum {
-    if self.positive && !other.positive {
-      return self.sub(other);
-    } else if !self.positive && other.positive {
-      return other.sub(self);
-    }
-
-    let result = self.ignore_sign_add(other);
-    if !self.positive && !other.positive {
-      return result.change_sign();
-    }
-    result
-  }
-
-  fn ignore_sign_add(&self, other: &LargeNum) -> LargeNum {
-    assert_eq!(self.base, other.base);
-
-    let (bigger, smaller) = {
-      if self.raw.len() > other.raw.len() {
-        (&self.raw, &other.raw)
+    let (bigger_num, smaller_num) = {
+      if self.clone().abs() > other.clone().abs() {
+        (self, other)
       } else {
-        (&other.raw, &self.raw)
+        (other, self)
       }
     };
 
-    let mut new_num: Vec<Digit> = vec![];
-    let mut carry: Bigger = 0; // 0 or 1
+    match (bigger_num.signnum(), smaller_num.signnum()) {
+      (0, 0) => LargeNum::zero(),
+      (_, 0) => bigger_num.clone(),
+      (0, _) => smaller_num.clone(),
+      (1, 1) => bigger_num.unsafe_add(smaller_num),
+      (-1, -1) => bigger_num.unsafe_add(smaller_num).change_sign(),
+      (1, -1) => bigger_num.unsafe_sub(smaller_num),
+      (-1, 1) => bigger_num.unsafe_sub(smaller_num).change_sign(),
+      _ => panic!(),
+    }
+  }
+
+  fn unsafe_add(&self, other: &LargeNum) -> LargeNum {
+    let (bigger, smaller) = (&self.digits, &other.digits);
+
+    let mut new_digits: Vec<u8> = vec![];
+    let mut carry: u16 = 0; // 0 or 1
 
     for i in 0..=bigger.len() {
       if i < smaller.len() {
-        let t = bigger[i] as Bigger + smaller[i] as Bigger + carry;
-        new_num.push((t % self.base) as Digit);
-        carry = t / self.base;
+        let t = bigger[i] as u16 + smaller[i] as u16 + carry;
+        new_digits.push((t % BASE) as u8);
+        carry = t / BASE;
       } else if i == bigger.len() {
         if carry == 1 {
-          new_num.push(1);
+          new_digits.push(1);
         }
       } else {
-        let t = bigger[i] as Bigger + carry;
-        new_num.push((t % self.base) as Digit);
-        carry = t / self.base;
+        let t = bigger[i] as u16 + carry;
+        new_digits.push((t % BASE) as u8);
+        carry = t / BASE;
       }
     }
 
     LargeNum {
-      raw: new_num,
+      digits: new_digits,
       positive: true,
-      base: self.base,
     }
   }
 
   pub fn sub(&self, other: &LargeNum) -> LargeNum {
     let (bigger_num, smaller_num) = {
-      if self.greater_than(&other) {
+      if self.clone().abs() > other.clone().abs() {
         (self, other)
       } else {
-        (self, other)
+        (other, self)
       }
     };
 
-    if bigger_num.positive && !smaller_num.positive {
-      return bigger_num.ignore_sign_add(smaller_num);
-    } else if !bigger_num.positive && smaller_num.positive {
-      return bigger_num.ignore_sign_add(smaller_num).change_sign();
+    match (bigger_num.signnum(), smaller_num.signnum()) {
+      (0, 0) => LargeNum::zero(),
+      (_, 0) => bigger_num.clone(),
+      (0, _) => smaller_num.clone().change_sign(),
+      (1, 1) => bigger_num.unsafe_sub(smaller_num),
+      (-1, -1) => bigger_num.unsafe_sub(smaller_num).change_sign(),
+      (1, -1) => bigger_num.unsafe_add(smaller_num),
+      (-1, 1) => bigger_num.unsafe_add(smaller_num).change_sign(),
+      _ => panic!(),
     }
-    let result = self.ignore_sign_sub(other);
-    if !self.positive && !other.positive {
-      return result.change_sign();
-    }
-    result
   }
 
-  fn ignore_sign_sub(&self, other: &LargeNum) -> LargeNum {
-    assert_eq!(self.base, other.base);
+  fn unsafe_sub(&self, other: &LargeNum) -> LargeNum {
+    let (bigger, smaller) = (&self.digits, &other.digits);
 
-    let (bigger, smaller) = {
-      if self.greater_than(other) {
-        (&self.raw, &other.raw)
-      } else {
-        (&other.raw, &self.raw)
-      }
-    };
-
-    let mut new_num: Vec<Digit> = vec![];
-    let mut carry: Bigger = 0; // 0 or 1
+    let mut new_digits: Vec<u8> = vec![];
+    let mut carry: u16 = 0; // 0 or 1
 
     for i in 0..bigger.len() {
       if i < smaller.len() {
-        new_num.push(((bigger[i] as Bigger + self.base - carry - smaller[i] as Bigger) % self.base) as Digit);
-        carry = if smaller[i] as Bigger + carry > bigger[i] as Bigger {
+        new_digits.push(((bigger[i] as u16 + BASE - carry - smaller[i] as u16) % BASE) as u8);
+        carry = if smaller[i] as u16 + carry > bigger[i] as u16 {
           1
         } else {
           0
         };
       } else {
-        new_num.push(((bigger[i] as Bigger + self.base - carry) % self.base) as Digit);
-        carry = if bigger[i] as Bigger == 0 && carry == 1 { 1 } else { 0 };
+        new_digits.push(((bigger[i] as u16 + BASE - carry) % BASE) as u8);
+        carry = if bigger[i] as u16 == 0 && carry == 1 { 1 } else { 0 };
       }
     }
 
     LargeNum {
-      raw: new_num,
+      digits: new_digits,
       positive: true,
-      base: self.base,
     }
     .trim_zeros()
   }
 
   pub fn mul(&self, other: &LargeNum) -> LargeNum {
-    return self.ignore_sign_mul(other);
-  }
-
-  fn ignore_sign_mul(&self, other: &LargeNum) -> LargeNum {
-    assert_eq!(self.base, other.base);
-
-    let (bigger, smaller) = {
-      if self.raw.len() > other.raw.len() {
-        (&self.raw, &other.raw)
+    let (bigger_num, smaller_num) = {
+      if self.clone().abs() > other.clone().abs() {
+        (self, other)
       } else {
-        (&other.raw, &self.raw)
+        (other, self)
       }
     };
 
-    let mut added_together: LargeNum = LargeNum {
-      raw: vec![],
-      positive: true,
-      base: self.base,
-    };
+    match (bigger_num.signnum(), smaller_num.signnum()) {
+      (_, 0) => LargeNum::zero(),
+      (0, _) => LargeNum::zero(),
+      (1, 1) => bigger_num.unsafe_mul(smaller_num),
+      (-1, -1) => bigger_num.unsafe_mul(smaller_num),
+      (1, -1) => bigger_num.unsafe_mul(smaller_num).change_sign(),
+      (-1, 1) => bigger_num.unsafe_mul(smaller_num).change_sign(),
+      _ => panic!(),
+    }
+  }
+
+  fn unsafe_mul(&self, other: &LargeNum) -> LargeNum {
+    let (bigger, smaller) = (&self.digits, &other.digits);
+
+    let mut large_num_sum: LargeNum = LargeNum::zero();
 
     for i in 0..smaller.len() {
-      let mut temp_num: Vec<Digit> = vec![];
-      let mut carry: Bigger = 0; // 0 or 1
+      let mut new_digits: Vec<u8> = vec![];
+      let mut carry: u16 = 0;
 
       for j in 0..=bigger.len() {
         if j == bigger.len() {
           if carry != 0 {
-            temp_num.push(carry as Digit);
+            new_digits.push(carry as u8);
           }
           break;
         }
-        let t = bigger[j] as Bigger * smaller[i] as Bigger + carry;
-        temp_num.push((t % self.base) as Digit);
-        carry = t / self.base;
+        let t = bigger[j] as u16 * smaller[i] as u16 + carry;
+        new_digits.push((t % BASE) as u8);
+        carry = t / BASE;
       }
 
-      temp_num.splice(0..0, [0].repeat(i));
+      new_digits.splice(0..0, [0].repeat(i));
 
-      added_together = added_together
+      large_num_sum = large_num_sum
         + LargeNum {
-          raw: temp_num,
+          digits: new_digits,
           positive: true,
-          base: self.base,
         };
     }
 
-    added_together
+    large_num_sum
   }
 
   pub fn pow(self, power: u128) -> LargeNum {
     let mut num = self;
     let mut power = power;
-    let mut result = LargeNum {
-      raw: vec![1],
-      positive: true,
-      base: num.base,
-    };
+    let mut result = LargeNum::one();
 
     while power > 0 {
       if power & 1 == 1 {
@@ -242,69 +260,19 @@ impl LargeNum {
   }
 }
 
-impl Default for LargeNum {
-  fn default() -> LargeNum {
-    LargeNum {
-      raw: vec![0],
-      positive: true,
-      base: Digit::MAX as Bigger + 1,
-    }
-  }
-}
-
 impl ToString for LargeNum {
   fn to_string(&self) -> String {
-    println!("HERE1!");
-    let mut summed = LargeNum {
-      raw: vec![0],
-      positive: true,
-      base: 10,
-    };
-
-    let base_as_large = LargeNum {
-      raw: self
-        .base
-        .to_string()
-        .chars()
-        .map(|x| x.to_digit(10).unwrap() as u8)
-        .collect(),
-      positive: true,
-      base: 10,
-    };
-
-    let mut base_prod = LargeNum {
-      raw: vec![1],
-      positive: true,
-      base: 10,
-    };
-
-    println!("HERE2!");
-
-    for (i, &d) in self.raw.iter().enumerate() {
-      let d_as_large = LargeNum {
-        raw: d.to_string().chars().map(|x| x.to_digit(10).unwrap() as u8).collect(),
-        positive: true,
-        base: 10,
-      };
-
-      summed = summed + ((&d_as_large).mul(&base_prod));
-      base_prod = base_prod * base_as_large.clone();
-    }
-
-    println!("HERE3!");
-
     let mut s = String::new();
     if !self.positive {
       s += "-";
     }
-    for num in summed.raw.iter().collect::<Vec<&Digit>>() {
-      s += &num.to_string();
-    }
-    s.trim_end().to_owned()
+
+    s += &self.digits.iter().map(|d| d.to_string()).rev().collect::<String>();
+    s
   }
 }
 
-impl Add for LargeNum {
+impl std::ops::Add for LargeNum {
   type Output = LargeNum;
 
   fn add(self, other: LargeNum) -> LargeNum {
@@ -312,7 +280,7 @@ impl Add for LargeNum {
   }
 }
 
-impl Sub for LargeNum {
+impl std::ops::Sub for LargeNum {
   type Output = LargeNum;
 
   fn sub(self, other: LargeNum) -> LargeNum {
@@ -320,7 +288,7 @@ impl Sub for LargeNum {
   }
 }
 
-impl Mul for LargeNum {
+impl std::ops::Mul for LargeNum {
   type Output = LargeNum;
 
   fn mul(self, other: LargeNum) -> LargeNum {
@@ -330,25 +298,51 @@ impl Mul for LargeNum {
 
 impl PartialEq for LargeNum {
   fn eq(&self, other: &Self) -> bool {
-    self.raw == other.raw && self.positive == other.positive
+    self.digits == other.digits && self.signnum() == other.signnum()
   }
 }
 
-mod tests {
-  use super::*;
-  #[test]
-  fn add() {
-    let a = LargeNum::new(vec![9, 9, 9, 9]);
-    let b = LargeNum::new(vec![9, 9, 9]);
-    assert_eq!(a + b, LargeNum::new(vec![8, 9, 9, 0, 1]));
+impl PartialOrd for LargeNum {
+  fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    if self == other {
+      return Some(std::cmp::Ordering::Equal);
+    } else if self.digits.len() == other.digits.len() {
+      let i = (0..self.digits.len())
+        .rev()
+        .find(|&i| self.digits[i] != other.digits[i])
+        .unwrap_or(0);
 
-    let a = LargeNum::new(vec![9, 9, 9, 9]).change_sign();
-    let b = LargeNum::new(vec![9, 9, 9]).change_sign();
-    assert_eq!(a + b, LargeNum::new(vec![8, 9, 9, 0, 1]).change_sign());
-
-    let a = LargeNum::new(vec![8, 9, 9, 9]);
-    let b = LargeNum::new(vec![9, 9, 9]).change_sign();
-    a - b;
-    // assert_eq!(a + b, LargeNum::new(vec![9, 9, 9, 8]));
+      return match self.digits[i] == other.digits[i] {
+        true => Some(std::cmp::Ordering::Equal),
+        false => match self.digits[i] < other.digits[i] {
+          true => Some(std::cmp::Ordering::Less),
+          false => Some(std::cmp::Ordering::Greater),
+        },
+      };
+    } else {
+      return match self.digits.len() < other.digits.len() {
+        true => Some(std::cmp::Ordering::Less),
+        false => Some(std::cmp::Ordering::Greater),
+      };
+    }
   }
 }
+
+// mod tests {
+//   use super::*;
+//   #[test]
+//   fn add() {
+//     // let a = LargeNum::new(vec![9, 9, 9, 9]);
+//     // let b = LargeNum::new(vec![9, 9, 9]);
+//     // assert_eq!(a + b, LargeNum::new(vec![8, 9, 9, 0, 1]));
+
+//     // let a = LargeNum::new(vec![9, 9, 9, 9]).change_sign();
+//     // let b = LargeNum::new(vec![9, 9, 9]).change_sign();
+//     // assert_eq!(a + b, LargeNum::new(vec![8, 9, 9, 0, 1]).change_sign());
+
+//     // let a = LargeNum::new(vec![8, 9, 9, 9]);
+//     // let b = LargeNum::new(vec![9, 9, 9]).change_sign();
+//     // a - b;
+//     // assert_eq!(a + b, LargeNum::new(vec![9, 9, 9, 8]));
+//   }
+// }
