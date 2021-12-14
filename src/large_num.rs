@@ -24,11 +24,11 @@ impl LargeNum {
   }
 
   pub fn from(string: &str) -> LargeNum {
-    assert!(string.is_empty() == false);
+    assert!(!string.is_empty());
 
     let (string, positive) = {
-      if string.starts_with("-") {
-        (&string[1..], false)
+      if let Some(stripped) = string.strip_prefix('-') {
+        (stripped, false)
       } else {
         (string, true)
       }
@@ -80,14 +80,7 @@ impl LargeNum {
   }
 
   fn trim_zeros(self) -> LargeNum {
-    let zero_count = self
-      .digits
-      .iter()
-      .skip(1)
-      .rev()
-      .take_while(|x| **x == 0)
-      .collect::<Vec<&u8>>()
-      .len();
+    let zero_count = self.digits.iter().skip(1).rev().take_while(|x| **x == 0).count();
 
     LargeNum {
       digits: self.digits[0..self.digits.len() - zero_count].to_vec(),
@@ -239,7 +232,7 @@ impl LargeNum {
 
     let mut large_num_sum: LargeNum = LargeNum::zero();
 
-    for i in 0..smaller.len() {
+    for (i, &smaller_digit) in smaller.iter().enumerate() {
       let mut new_digits: Vec<u8> = vec![];
       let mut carry: u16 = 0;
 
@@ -250,18 +243,14 @@ impl LargeNum {
           }
           break;
         }
-        let t = bigger[j] as u16 * smaller[i] as u16 + carry;
+        let t = bigger[j] as u16 * smaller_digit as u16 + carry;
         new_digits.push((t % 10) as u8);
         carry = t / 10;
       }
 
       new_digits.splice(0..0, [0].repeat(i));
 
-      large_num_sum = large_num_sum
-        + LargeNum {
-          digits: new_digits,
-          positive: true,
-        };
+      large_num_sum += LargeNum::new(new_digits, true);
     }
 
     large_num_sum
@@ -279,7 +268,7 @@ impl LargeNum {
       power >>= 1;
       num = (&num).mul(&num);
     }
-    return result;
+    result
   }
 }
 

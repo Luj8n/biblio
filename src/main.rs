@@ -1,4 +1,4 @@
-use biblio::large_num::{LargeNum, ToLarge};
+use biblio::large_num::ToLarge;
 use std::time::Instant;
 
 fn main() {
