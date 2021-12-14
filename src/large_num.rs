@@ -1,10 +1,11 @@
-// TODO! make Ord work with negative numbers
 // TODO: add '+=' (AddAsign)...
 // TODO: implement Display trait
 // TODO: write tests
 // TODO: add 'Div' function
 // TODO: make operations work with primitive types
 // TODO: write benchmarks
+
+use std::cmp::Ordering::{Equal, Greater, Less};
 
 const BASE: u16 = 10;
 
@@ -91,6 +92,28 @@ impl LargeNum {
     LargeNum {
       digits: self.digits[0..self.digits.len() - zero_count].to_vec(),
       positive: true,
+    }
+  }
+
+  fn unsafe_cmp(&self, other: &LargeNum) -> Option<std::cmp::Ordering> {
+    if self.digits.len() == other.digits.len() {
+      let i = (0..self.digits.len())
+        .rev()
+        .find(|&i| self.digits[i] != other.digits[i])
+        .unwrap_or(0);
+
+      match self.digits[i] == other.digits[i] {
+        true => Some(Equal),
+        false => match self.digits[i] < other.digits[i] {
+          true => Some(Less),
+          false => Some(Greater),
+        },
+      }
+    } else {
+      match self.digits.len() < other.digits.len() {
+        true => Some(Less),
+        false => Some(Greater),
+      }
     }
   }
 
@@ -304,45 +327,53 @@ impl PartialEq for LargeNum {
 
 impl PartialOrd for LargeNum {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-    if self == other {
-      return Some(std::cmp::Ordering::Equal);
-    } else if self.digits.len() == other.digits.len() {
-      let i = (0..self.digits.len())
-        .rev()
-        .find(|&i| self.digits[i] != other.digits[i])
-        .unwrap_or(0);
-
-      return match self.digits[i] == other.digits[i] {
-        true => Some(std::cmp::Ordering::Equal),
-        false => match self.digits[i] < other.digits[i] {
-          true => Some(std::cmp::Ordering::Less),
-          false => Some(std::cmp::Ordering::Greater),
-        },
-      };
-    } else {
-      return match self.digits.len() < other.digits.len() {
-        true => Some(std::cmp::Ordering::Less),
-        false => Some(std::cmp::Ordering::Greater),
-      };
+    match (self.signnum(), other.signnum()) {
+      (0, 0) => Some(Equal),
+      (1, 0) => Some(Greater),
+      (0, 1) => Some(Less),
+      (0, -1) => Some(Greater),
+      (-1, 0) => Some(Less),
+      (1, -1) => Some(Greater),
+      (-1, 1) => Some(Less),
+      (-1, -1) => other.unsafe_cmp(self),
+      (1, 1) => self.unsafe_cmp(other),
+      _ => panic!(),
     }
   }
 }
 
-// mod tests {
-//   use super::*;
-//   #[test]
-//   fn add() {
-//     // let a = LargeNum::new(vec![9, 9, 9, 9]);
-//     // let b = LargeNum::new(vec![9, 9, 9]);
-//     // assert_eq!(a + b, LargeNum::new(vec![8, 9, 9, 0, 1]));
+pub trait ToLarge {
+  fn to_large(&self) -> LargeNum;
+}
 
-//     // let a = LargeNum::new(vec![9, 9, 9, 9]).change_sign();
-//     // let b = LargeNum::new(vec![9, 9, 9]).change_sign();
-//     // assert_eq!(a + b, LargeNum::new(vec![8, 9, 9, 0, 1]).change_sign());
+impl ToLarge for &str {
+  fn to_large(&self) -> LargeNum {
+    LargeNum::from(self)
+  }
+}
 
-//     // let a = LargeNum::new(vec![8, 9, 9, 9]);
-//     // let b = LargeNum::new(vec![9, 9, 9]).change_sign();
-//     // a - b;
-//     // assert_eq!(a + b, LargeNum::new(vec![9, 9, 9, 8]));
-//   }
-// }
+mod tests {
+  use super::*;
+
+  #[test]
+  fn add() {
+    let a = "989".to_large();
+    let b = "12".to_large();
+    let c = (&a).add(&b);
+    assert_eq!(c, "1001".to_large());
+    assert_eq!(c.to_string(), "1001");
+
+    assert_ne!(a, b);
+    assert_ne!(a, c);
+    assert_ne!(b, c);
+
+    assert!(a > b);
+    assert!(b < a);
+
+    assert!(c > a);
+    assert!(a < c);
+
+    assert!(c > b);
+    assert!(b < c);
+  }
+}
