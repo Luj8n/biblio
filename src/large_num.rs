@@ -1,13 +1,13 @@
-// TODO: add '+=' (AddAsign)...
-// TODO: implement Display trait
 // TODO: write tests
 // TODO: add 'Div' function
 // TODO: make operations work with primitive types
 // TODO: write benchmarks
 
-use std::cmp::Ordering::{Equal, Greater, Less};
-
-const BASE: u16 = 10;
+use std::{
+  cmp::Ordering::{Equal, Greater, Less},
+  fmt::Display,
+  ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign},
+};
 
 #[derive(Clone, Debug)]
 
@@ -18,7 +18,7 @@ pub struct LargeNum {
 
 impl LargeNum {
   pub fn new(digits: Vec<u8>, positive: bool) -> LargeNum {
-    assert!(digits.iter().all(|&v| (v as u16) < BASE));
+    assert!(digits.iter().all(|&v| (v as u16) < 10));
 
     LargeNum { digits, positive }.trim_zeros()
   }
@@ -91,7 +91,7 @@ impl LargeNum {
 
     LargeNum {
       digits: self.digits[0..self.digits.len() - zero_count].to_vec(),
-      positive: true,
+      positive: self.positive,
     }
   }
 
@@ -147,16 +147,16 @@ impl LargeNum {
     for i in 0..=bigger.len() {
       if i < smaller.len() {
         let t = bigger[i] as u16 + smaller[i] as u16 + carry;
-        new_digits.push((t % BASE) as u8);
-        carry = t / BASE;
+        new_digits.push((t % 10) as u8);
+        carry = t / 10;
       } else if i == bigger.len() {
         if carry == 1 {
           new_digits.push(1);
         }
       } else {
         let t = bigger[i] as u16 + carry;
-        new_digits.push((t % BASE) as u8);
-        carry = t / BASE;
+        new_digits.push((t % 10) as u8);
+        carry = t / 10;
       }
     }
 
@@ -195,14 +195,14 @@ impl LargeNum {
 
     for i in 0..bigger.len() {
       if i < smaller.len() {
-        new_digits.push(((bigger[i] as u16 + BASE - carry - smaller[i] as u16) % BASE) as u8);
+        new_digits.push(((bigger[i] as u16 + 10 - carry - smaller[i] as u16) % 10) as u8);
         carry = if smaller[i] as u16 + carry > bigger[i] as u16 {
           1
         } else {
           0
         };
       } else {
-        new_digits.push(((bigger[i] as u16 + BASE - carry) % BASE) as u8);
+        new_digits.push(((bigger[i] as u16 + 10 - carry) % 10) as u8);
         carry = if bigger[i] as u16 == 0 && carry == 1 { 1 } else { 0 };
       }
     }
@@ -251,8 +251,8 @@ impl LargeNum {
           break;
         }
         let t = bigger[j] as u16 * smaller[i] as u16 + carry;
-        new_digits.push((t % BASE) as u8);
-        carry = t / BASE;
+        new_digits.push((t % 10) as u8);
+        carry = t / 10;
       }
 
       new_digits.splice(0..0, [0].repeat(i));
@@ -283,39 +283,62 @@ impl LargeNum {
   }
 }
 
-impl ToString for LargeNum {
-  fn to_string(&self) -> String {
-    let mut s = String::new();
-    if !self.positive {
-      s += "-";
-    }
-
-    s += &self.digits.iter().map(|d| d.to_string()).rev().collect::<String>();
-    s
+impl Display for LargeNum {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(
+      f,
+      "{}{}",
+      if self.positive { "" } else { "-" },
+      self.digits.iter().map(|d| d.to_string()).rev().collect::<String>()
+    )
   }
 }
 
-impl std::ops::Add for LargeNum {
+impl Add for LargeNum {
   type Output = LargeNum;
 
-  fn add(self, other: LargeNum) -> LargeNum {
-    (&self).add(&other)
+  fn add(self, rhs: LargeNum) -> LargeNum {
+    (&self).add(&rhs)
   }
 }
 
-impl std::ops::Sub for LargeNum {
-  type Output = LargeNum;
-
-  fn sub(self, other: LargeNum) -> LargeNum {
-    (&self).sub(&other)
+impl AddAssign for LargeNum {
+  fn add_assign(&mut self, rhs: LargeNum) {
+    let new_num = self.clone() + rhs;
+    self.digits = new_num.digits;
+    self.positive = new_num.positive;
   }
 }
 
-impl std::ops::Mul for LargeNum {
+impl Sub for LargeNum {
   type Output = LargeNum;
 
-  fn mul(self, other: LargeNum) -> LargeNum {
-    (&self).mul(&other)
+  fn sub(self, rhs: LargeNum) -> LargeNum {
+    (&self).sub(&rhs)
+  }
+}
+
+impl SubAssign for LargeNum {
+  fn sub_assign(&mut self, rhs: LargeNum) {
+    let new_num = self.clone() - rhs;
+    self.digits = new_num.digits;
+    self.positive = new_num.positive;
+  }
+}
+
+impl Mul for LargeNum {
+  type Output = LargeNum;
+
+  fn mul(self, rhs: LargeNum) -> LargeNum {
+    (&self).mul(&rhs)
+  }
+}
+
+impl MulAssign for LargeNum {
+  fn mul_assign(&mut self, rhs: LargeNum) {
+    let new_num = self.clone() * rhs;
+    self.digits = new_num.digits;
+    self.positive = new_num.positive;
   }
 }
 
